@@ -5,6 +5,7 @@ use std::{
 
 use clap::Parser;
 use scraper::{Element, Html, Selector};
+use url::Url;
 use walkdir::WalkDir;
 
 #[derive(Parser, Debug)]
@@ -18,11 +19,10 @@ struct Args {
 
 fn main() -> Result<(), std::io::Error> {
     let mut args = Args::parse();
-    if args.base.is_none() {
-        args.base = Some(std::env::current_dir()?);
-    }
+    let current_dir = std::env::current_dir()?;
+    let base_dir = args.base.unwrap_or(current_dir.clone()).canonicalize()?;
     if args.directories.is_empty() {
-        args.directories.push(std::env::current_dir()?);
+        args.directories.push(current_dir.clone());
     }
     for directory in &args.directories {
         if !directory.is_dir() {}
@@ -50,7 +50,22 @@ fn main() -> Result<(), std::io::Error> {
                 let selector = Selector::parse("a").unwrap();
                 for element in document.select(&selector) {
                     if let Some(href) = element.value().attr("href") {
-                        println!("{}", href);
+                        let href = href.strip_prefix('/').unwrap_or(href);
+                        // Test if URL is actually relative
+                        if Url::parse(href) == Err(url::ParseError::RelativeUrlWithoutBase) {
+                            let base_url = Url::from_directory_path(&base_dir.join("")).unwrap();
+                            let data = base_url.join(href).expect("bad url");
+                            let path = PathBuf::from(data.path());
+                            if !(path.is_file()
+                                || path.is_dir() && path.join("index.html").is_file())
+                            {
+                                println!(
+                                    "FAILURE {} {:?}",
+                                    path.display(),
+                                    path.join("index.html")
+                                );
+                            }
+                        }
                     }
                 }
             }
