@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use clap::Parser;
+use walkdir::WalkDir;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -19,6 +20,25 @@ fn main() -> Result<(), std::io::Error> {
     if args.directories.is_empty() {
         args.directories.push(std::env::current_dir()?);
     }
-    println!("Hello, world! {:?}", args.directories);
+    for directory in &args.directories {
+        if !directory.is_dir() {}
+    }
+    let nondirs: Vec<PathBuf> = args
+        .directories
+        .iter()
+        .filter(|d| !d.is_dir())
+        .map(PathBuf::clone)
+        .collect();
+    if !nondirs.is_empty() {
+        for nondir in nondirs {
+            eprintln!("Directory {:?} does not exist", nondir);
+        }
+        return Ok(());
+    }
+    for directory in &args.directories {
+        for entry in WalkDir::new(directory) {
+            println!("{:?}", entry?.path());
+        }
+    }
     Ok(())
 }

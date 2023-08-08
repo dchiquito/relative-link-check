@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.3.21", features = ["derive"] }
 scraper = "0.17.1"
+walkdir = "2.3.3"
