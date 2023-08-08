@@ -53,6 +53,8 @@ fn main() -> Result<(), std::io::Error> {
                         let href = href.strip_prefix('/').unwrap_or(href);
                         // Test if URL is actually relative
                         if Url::parse(href) == Err(url::ParseError::RelativeUrlWithoutBase) {
+                            // TODO "/foo" should refer to base_dir/foo, but "foo" should refer to
+                            // base_dir/file_dir/foo.
                             let base_url = Url::from_directory_path(&base_dir.join("")).unwrap();
                             let data = base_url.join(href).expect("bad url");
                             let path = PathBuf::from(data.path());
