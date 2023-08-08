@@ -1,6 +1,10 @@
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsStr,
+    path::{Path, PathBuf},
+};
 
 use clap::Parser;
+use scraper::{Element, Html, Selector};
 use walkdir::WalkDir;
 
 #[derive(Parser, Debug)]
@@ -36,8 +40,20 @@ fn main() -> Result<(), std::io::Error> {
         return Ok(());
     }
     for directory in &args.directories {
-        for entry in WalkDir::new(directory) {
-            println!("{:?}", entry?.path());
+        for result in WalkDir::new(directory) {
+            let entry = result?;
+            let path = entry.path();
+            if path.extension() == Some(OsStr::new("html")) {
+                println!("{:?}", path);
+                let contents = std::fs::read_to_string(path)?;
+                let document = Html::parse_document(&contents);
+                let selector = Selector::parse("a").unwrap();
+                for element in document.select(&selector) {
+                    if let Some(href) = element.value().attr("href") {
+                        println!("{}", href);
+                    }
+                }
+            }
         }
     }
     Ok(())
