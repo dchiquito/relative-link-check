@@ -1,5 +1,5 @@
 [package]
-name = "relative-link-check"
+name = "rlc"
 version = "0.1.0"
 edition = "2021"
 
