@@ -93,7 +93,7 @@ impl FileCache {
                     .strip_prefix(directory)
                     .expect("can't strip the prefix");
                 if path.extension() == Some(OsStr::new("html")) {
-                    let info = HtmlInfo::parse_file(path)?;
+                    let info = HtmlInfo::parse_file(entry.path())?;
                     map.insert(PathBuf::from(path), info);
                 }
             }
@@ -105,25 +105,26 @@ impl FileCache {
         map.iter()
     }
     pub fn parse_path_fragment(path: &Path) -> (PathBuf, Option<&str>) {
-        println!(
-            "{:?}",
-            path.components().collect::<Vec<std::path::Component>>()
-        );
+        // println!(
+        //     "{:?}",
+        //     path.components().collect::<Vec<std::path::Component>>()
+        // );
         let path = path.to_str().expect("Invalid path");
         let pattern = Regex::new("^(.*?)(?:#([^#]*))?$").unwrap();
         if let Some(captures) = pattern.captures(path) {
             let path = PathBuf::from(captures.get(1).unwrap().as_str());
             let fragment = captures.get(2).map(|m| m.as_str());
+            let fragment = fragment.filter(|s| !s.is_empty());
             return (path, fragment);
         }
         panic!("Failed to parse path {path:?}")
     }
     pub fn contains(&self, path: &Path) -> bool {
         let (path, fragment_option) = Self::parse_path_fragment(path);
-        println!(
-            "{path:?} {fragment_option:?} {:?}",
-            self.0.keys().map(PathBuf::clone).collect::<Vec<PathBuf>>()
-        );
+        // println!(
+        //     "{path:?} {fragment_option:?} {:?}",
+        //     self.0.keys().map(PathBuf::clone).collect::<Vec<PathBuf>>()
+        // );
         let path_with_index = path.join("index.html");
         if let Some(info) = self.0.get(&path).or_else(|| self.0.get(&path_with_index)) {
             if let Some(fragment) = fragment_option {
@@ -165,7 +166,7 @@ pub fn normalize_path(path: &Path) -> PathBuf {
 }
 
 pub fn file_exists(base_dir: &Path, path: &Path) -> bool {
-    println!("Does it exxists? {:?}", base_dir.join(path));
+    // println!("Does it exxists? {:?}", base_dir.join(path));
     base_dir.join(path).is_file()
 }
 
@@ -173,21 +174,21 @@ fn main() -> Result<(), std::io::Error> {
     let mut args = Args::parse();
     let base_dir = args.base_dir()?;
     let files = FileCache::build(args.resolve_directories()?)?;
-    println!("{:?}", files);
+    // println!("{:?}", files);
     for (path, info) in files.iter() {
-        println!("{}", path.display());
+        // println!("{}", path.display());
         for href in info.hrefs.iter() {
             // Test if URL is actually relative
             if Url::parse(href) == Err(url::ParseError::RelativeUrlWithoutBase) {
                 let xxx = &path.parent().expect("No parent").join(href);
                 let xxx = normalize_path(xxx);
-                println!("Resolving {href} to {xxx:?} from file {path:?}");
+                // println!("Resolving {href} to {xxx:?} from file {path:?}");
                 if files.contains(&xxx) || file_exists(&base_dir, &xxx) {
-                    println!("Passed {xxx:?}");
+                    // println!("Passed {xxx:?}");
                 } else {
-                    println!("Failed {xxx:?}");
+                    println!("Failed {xxx:?} in {path:?} in {base_dir:?}");
                 }
-                println!()
+                // println!()
             }
         }
     }
