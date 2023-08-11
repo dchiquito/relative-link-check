@@ -35,19 +35,14 @@ impl Args {
         if self.directories.is_empty() {
             self.directories.push(current_dir.clone());
         }
-        let nondirs: Vec<&PathBuf> = self
-            .directories
-            .iter()
-            .filter(|d| !d.is_dir())
-            // .map(PathBuf::clone)
-            .collect();
+        let nondirs: Vec<&PathBuf> = self.directories.iter().filter(|d| !d.is_dir()).collect();
         if !nondirs.is_empty() {
             for nondir in nondirs {
                 eprintln!("Directory {:?} does not exist", nondir);
             }
             exit(1)
         }
-        return Ok(&self.directories);
+        Ok(&self.directories)
     }
 }
 
@@ -111,10 +106,6 @@ impl FileCache {
         map.iter()
     }
     pub fn parse_path_fragment(path: &Path) -> (PathBuf, Option<&str>) {
-        // println!(
-        //     "{:?}",
-        //     path.components().collect::<Vec<std::path::Component>>()
-        // );
         let path = path.to_str().expect("Invalid path");
         let pattern = Regex::new("^(.*?)(?:#([^#]*))?$").unwrap();
         if let Some(captures) = pattern.captures(path) {
@@ -127,10 +118,6 @@ impl FileCache {
     }
     pub fn contains(&self, path: &Path) -> bool {
         let (path, fragment_option) = Self::parse_path_fragment(path);
-        // println!(
-        //     "{path:?} {fragment_option:?} {:?}",
-        //     self.0.keys().map(PathBuf::clone).collect::<Vec<PathBuf>>()
-        // );
         let path_with_index = path.join("index.html");
         if let Some(info) = self.0.get(&path).or_else(|| self.0.get(&path_with_index)) {
             if let Some(fragment) = fragment_option {
@@ -172,7 +159,6 @@ pub fn normalize_path(path: &Path) -> PathBuf {
 }
 
 pub fn file_exists(base_dir: &Path, path: &Path) -> bool {
-    // println!("Does it exxists? {:?}", base_dir.join(path));
     base_dir.join(path).is_file()
 }
 
@@ -180,23 +166,17 @@ fn main() -> Result<(), std::io::Error> {
     let mut args = Args::parse();
     let base_dir = args.base_dir()?;
     let files = FileCache::build(args.resolve_directories()?)?;
-    // println!("{:?}", files);
     for (path, info) in files.iter() {
-        // println!("{}", path.display());
-        for href in info.hrefs.iter() {
-            // Test if URL is actually relative
-            if Url::parse(href) == Err(url::ParseError::RelativeUrlWithoutBase) {
-                let xxx = &path.parent().expect("No parent").join(href);
-                let xxx = normalize_path(xxx);
-                // println!("Resolving {href} to {xxx:?} from file {path:?}");
-                if files.contains(&xxx) || file_exists(&base_dir, &xxx) {
-                    // println!("Passed {xxx:?}");
-                } else {
-                    println!("Failed {xxx:?} in {path:?} in {base_dir:?}");
-                }
-                // println!()
+        for href in info.relative_hrefs.iter() {
+            let xxx = &path.parent().expect("No parent").join(href);
+            let xxx = normalize_path(xxx);
+            if files.contains(&xxx) || file_exists(&base_dir, &xxx) {
+                // println!("Passed {xxx:?}");
+            } else {
+                println!("Failed {xxx:?} in {path:?} in {base_dir:?}");
             }
         }
+        // println!("Skipping {} external links", info.external_hrefs.len());
     }
     Ok(())
 }
