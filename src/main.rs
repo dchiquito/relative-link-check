@@ -1,12 +1,13 @@
 use std::{
     collections::HashMap,
     ffi::OsStr,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     process::exit,
 };
 
 use clap::Parser;
-use scraper::{Element, Html, Selector};
+use regex::Regex;
+use scraper::{Html, Selector};
 use url::Url;
 use walkdir::WalkDir;
 
@@ -103,6 +104,69 @@ impl FileCache {
         let FileCache(map) = self;
         map.iter()
     }
+    pub fn parse_path_fragment(path: &Path) -> (PathBuf, Option<&str>) {
+        println!(
+            "{:?}",
+            path.components().collect::<Vec<std::path::Component>>()
+        );
+        let path = path.to_str().expect("Invalid path");
+        let pattern = Regex::new("^(.*?)(?:#([^#]*))?$").unwrap();
+        if let Some(captures) = pattern.captures(path) {
+            let path = PathBuf::from(captures.get(1).unwrap().as_str());
+            let fragment = captures.get(2).map(|m| m.as_str());
+            return (path, fragment);
+        }
+        panic!("Failed to parse path {path:?}")
+    }
+    pub fn contains(&self, path: &Path) -> bool {
+        let (path, fragment_option) = Self::parse_path_fragment(path);
+        println!(
+            "{path:?} {fragment_option:?} {:?}",
+            self.0.keys().map(PathBuf::clone).collect::<Vec<PathBuf>>()
+        );
+        let path_with_index = path.join("index.html");
+        if let Some(info) = self.0.get(&path).or_else(|| self.0.get(&path_with_index)) {
+            if let Some(fragment) = fragment_option {
+                info.ids.contains(&fragment.to_string())
+            } else {
+                true
+            }
+        } else {
+            false
+        }
+    }
+}
+
+pub fn normalize_path(path: &Path) -> PathBuf {
+    let mut components = path.components().peekable();
+    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
+        components.next();
+        PathBuf::from(c.as_os_str())
+    } else {
+        PathBuf::new()
+    };
+
+    for component in components {
+        match component {
+            Component::Prefix(..) => unreachable!(),
+            Component::RootDir => {
+                ret.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                ret.pop();
+            }
+            Component::Normal(c) => {
+                ret.push(c);
+            }
+        }
+    }
+    ret.strip_prefix("/").map(Path::to_path_buf).unwrap_or(ret)
+}
+
+pub fn file_exists(base_dir: &Path, path: &Path) -> bool {
+    println!("Does it exxists? {:?}", base_dir.join(path));
+    base_dir.join(path).is_file()
 }
 
 fn main() -> Result<(), std::io::Error> {
@@ -113,19 +177,17 @@ fn main() -> Result<(), std::io::Error> {
     for (path, info) in files.iter() {
         println!("{}", path.display());
         for href in info.hrefs.iter() {
-            // let href = href.strip_prefix('/').unwrap_or(href);
             // Test if URL is actually relative
             if Url::parse(href) == Err(url::ParseError::RelativeUrlWithoutBase) {
-                // TODO "/foo" should refer to base_dir/foo, but "foo" should refer to
-                // base_dir/file_dir/foo.
-                let xxx = path.join(href);
-                println!("xxx {:?}", xxx);
-                let base_url = Url::from_directory_path(&base_dir.join("")).unwrap();
-                let data = base_url.join(href).expect("bad url");
-                let path = PathBuf::from(data.path());
-                if !(path.is_file() || path.is_dir() && path.join("index.html").is_file()) {
-                    println!("FAILURE {} {:?}", path.display(), path.join("index.html"));
+                let xxx = &path.parent().expect("No parent").join(href);
+                let xxx = normalize_path(xxx);
+                println!("Resolving {href} to {xxx:?} from file {path:?}");
+                if files.contains(&xxx) || file_exists(&base_dir, &xxx) {
+                    println!("Passed {xxx:?}");
+                } else {
+                    println!("Failed {xxx:?}");
                 }
+                println!()
             }
         }
     }
