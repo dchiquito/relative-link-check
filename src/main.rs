@@ -53,7 +53,8 @@ impl Args {
 
 #[derive(Debug)]
 struct HtmlInfo {
-    hrefs: Vec<String>,
+    relative_hrefs: Vec<String>,
+    external_hrefs: Vec<String>,
     ids: Vec<String>,
 }
 
@@ -65,18 +66,23 @@ impl HtmlInfo {
     pub fn parse(document: &str) -> HtmlInfo {
         let document = Html::parse_document(document);
         let link_selector = Selector::parse("a[href]").unwrap();
-        let hrefs = document
+        let (relative_hrefs, external_hrefs) = document
             .select(&link_selector)
             .filter_map(|element| element.value().attr("href"))
             .map(String::from)
-            .collect();
+            .partition(|href| Url::parse(href) == Err(url::ParseError::RelativeUrlWithoutBase));
+
         let id_selector = Selector::parse("*[id]").unwrap();
         let ids = document
             .select(&id_selector)
             .filter_map(|element| element.value().attr("id"))
             .map(String::from)
             .collect();
-        HtmlInfo { hrefs, ids }
+        HtmlInfo {
+            relative_hrefs,
+            external_hrefs,
+            ids,
+        }
     }
 }
 
