@@ -101,14 +101,11 @@ impl FileCache {
         }
         Ok(FileCache(map))
     }
-    pub fn iter(&self) -> std::collections::hash_map::Iter<'_, PathBuf, HtmlInfo> {
-        let FileCache(map) = self;
-        map.iter()
-    }
-    pub fn contains(&self, path: &Path, fragment_option: &Option<&str>) -> bool {
+    pub fn contains(&self, RelativeLink { path, fragment }: &RelativeLink) -> bool {
         let path_with_index = path.join("index.html");
         if let Some(info) = self.0.get(path).or_else(|| self.0.get(&path_with_index)) {
-            if let Some(fragment) = fragment_option {
+            // If a "#fragment" id is present, also check that the document contains the fragment
+            if let Some(fragment) = fragment {
                 info.ids.contains(&fragment.to_string())
             } else {
                 true
@@ -117,18 +114,39 @@ impl FileCache {
             false
         }
     }
+    pub fn uncached_file_links(&self) -> Vec<RelativeLink> {
+        self.0
+            .iter()
+            .flat_map(|(file_path, info)| {
+                info.relative_hrefs
+                    .iter()
+                    .map(|href| file_path.parent().expect("No parent").join(href))
+                    .map(|href| normalize_path(&href))
+                    .map(|href| RelativeLink::new(&href))
+                    .filter(|link| !self.contains(link))
+            })
+            .collect()
+    }
 }
 
-pub fn parse_path_fragment(path: &Path) -> (PathBuf, Option<&str>) {
-    let path = path.to_str().expect("Invalid path");
-    let pattern = Regex::new("^(.*?)(?:#([^#]*))?$").unwrap();
-    if let Some(captures) = pattern.captures(path) {
-        let path = PathBuf::from(captures.get(1).unwrap().as_str());
-        let fragment = captures.get(2).map(|m| m.as_str());
-        let fragment = fragment.filter(|s| !s.is_empty());
-        return (path, fragment);
+#[derive(Debug)]
+struct RelativeLink {
+    path: PathBuf,
+    fragment: Option<String>,
+}
+
+impl RelativeLink {
+    pub fn new(path: &Path) -> RelativeLink {
+        let path = path.to_str().expect("Invalid path");
+        let pattern = Regex::new("^(.*?)(?:#([^#]*))?$").unwrap();
+        if let Some(captures) = pattern.captures(path) {
+            let path = PathBuf::from(captures.get(1).unwrap().as_str());
+            let fragment = captures.get(2).map(|m| m.as_str());
+            let fragment = fragment.filter(|s| !s.is_empty()).map(|s| s.to_string());
+            return RelativeLink { path, fragment };
+        }
+        panic!("Failed to parse path {path:?}")
     }
-    panic!("Failed to parse path {path:?}")
 }
 
 pub fn normalize_path(path: &Path) -> PathBuf {
@@ -166,18 +184,10 @@ fn main() -> Result<(), std::io::Error> {
     let mut args = Args::parse();
     let base_dir = args.base_dir()?;
     let files = FileCache::build(args.resolve_directories()?)?;
-    for (path, info) in files.iter() {
-        for href in info.relative_hrefs.iter() {
-            let href_path = &path.parent().expect("No parent").join(href);
-            let href_path = normalize_path(href_path);
-            let (href_path, fragment) = parse_path_fragment(&href_path);
-            if files.contains(&href_path, &fragment) || file_exists(&base_dir, &href_path) {
-                // println!("Passed {xxx:?}");
-            } else {
-                println!("Failed {href_path:?} in {path:?} in {base_dir:?}");
-            }
+    for link in files.uncached_file_links() {
+        if !file_exists(&base_dir, &link.path) {
+            println!("Failed {link:?} in {base_dir:?}");
         }
-        // println!("Skipping {} external links", info.external_hrefs.len());
     }
     Ok(())
 }
