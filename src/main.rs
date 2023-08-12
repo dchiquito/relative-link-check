@@ -105,21 +105,9 @@ impl FileCache {
         let FileCache(map) = self;
         map.iter()
     }
-    pub fn parse_path_fragment(path: &Path) -> (PathBuf, Option<&str>) {
-        let path = path.to_str().expect("Invalid path");
-        let pattern = Regex::new("^(.*?)(?:#([^#]*))?$").unwrap();
-        if let Some(captures) = pattern.captures(path) {
-            let path = PathBuf::from(captures.get(1).unwrap().as_str());
-            let fragment = captures.get(2).map(|m| m.as_str());
-            let fragment = fragment.filter(|s| !s.is_empty());
-            return (path, fragment);
-        }
-        panic!("Failed to parse path {path:?}")
-    }
-    pub fn contains(&self, path: &Path) -> bool {
-        let (path, fragment_option) = Self::parse_path_fragment(path);
+    pub fn contains(&self, path: &Path, fragment_option: &Option<&str>) -> bool {
         let path_with_index = path.join("index.html");
-        if let Some(info) = self.0.get(&path).or_else(|| self.0.get(&path_with_index)) {
+        if let Some(info) = self.0.get(path).or_else(|| self.0.get(&path_with_index)) {
             if let Some(fragment) = fragment_option {
                 info.ids.contains(&fragment.to_string())
             } else {
@@ -129,6 +117,18 @@ impl FileCache {
             false
         }
     }
+}
+
+pub fn parse_path_fragment(path: &Path) -> (PathBuf, Option<&str>) {
+    let path = path.to_str().expect("Invalid path");
+    let pattern = Regex::new("^(.*?)(?:#([^#]*))?$").unwrap();
+    if let Some(captures) = pattern.captures(path) {
+        let path = PathBuf::from(captures.get(1).unwrap().as_str());
+        let fragment = captures.get(2).map(|m| m.as_str());
+        let fragment = fragment.filter(|s| !s.is_empty());
+        return (path, fragment);
+    }
+    panic!("Failed to parse path {path:?}")
 }
 
 pub fn normalize_path(path: &Path) -> PathBuf {
@@ -168,12 +168,13 @@ fn main() -> Result<(), std::io::Error> {
     let files = FileCache::build(args.resolve_directories()?)?;
     for (path, info) in files.iter() {
         for href in info.relative_hrefs.iter() {
-            let xxx = &path.parent().expect("No parent").join(href);
-            let xxx = normalize_path(xxx);
-            if files.contains(&xxx) || file_exists(&base_dir, &xxx) {
+            let href_path = &path.parent().expect("No parent").join(href);
+            let href_path = normalize_path(href_path);
+            let (href_path, fragment) = parse_path_fragment(&href_path);
+            if files.contains(&href_path, &fragment) || file_exists(&base_dir, &href_path) {
                 // println!("Passed {xxx:?}");
             } else {
-                println!("Failed {xxx:?} in {path:?} in {base_dir:?}");
+                println!("Failed {href_path:?} in {path:?} in {base_dir:?}");
             }
         }
         // println!("Skipping {} external links", info.external_hrefs.len());
