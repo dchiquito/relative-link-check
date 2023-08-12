@@ -1,7 +1,8 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use scraper::{Html, Selector};
 use url::Url;
+use regex::Regex;
 
 /**
 The relevant contents of an HTML document.
@@ -42,6 +43,26 @@ impl HtmlInfo {
             external_hrefs,
             ids,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct RelativeLink {
+    pub path: PathBuf,
+    pub fragment: Option<String>,
+}
+
+impl RelativeLink {
+    pub fn new(path: &Path) -> RelativeLink {
+        let path = path.to_str().expect("Invalid path");
+        let pattern = Regex::new("^(.*?)(?:#([^#]*))?$").unwrap();
+        if let Some(captures) = pattern.captures(path) {
+            let path = PathBuf::from(captures.get(1).unwrap().as_str());
+            let fragment = captures.get(2).map(|m| m.as_str());
+            let fragment = fragment.filter(|s| !s.is_empty()).map(|s| s.to_string());
+            return RelativeLink { path, fragment };
+        }
+        panic!("Failed to parse path {path:?}")
     }
 }
 
