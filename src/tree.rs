@@ -2,14 +2,38 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
 
+use regex::Regex;
 use walkdir::WalkDir;
 
-use crate::html::{HtmlInfo, RelativeLink};
+use crate::html::HtmlInfo;
+
+/**
+A link to an HTML file, with optional fragment.
+*/
+#[derive(Debug)]
+pub struct HtmlFileLink {
+    pub path: PathBuf,
+    pub fragment: Option<String>,
+}
+
+impl HtmlFileLink {
+    pub fn new(path: &Path) -> HtmlFileLink {
+        let path = path.to_str().expect("Invalid path");
+        let pattern = Regex::new("^(.*?)(?:#([^#]*))?$").unwrap();
+        if let Some(captures) = pattern.captures(path) {
+            let path = PathBuf::from(captures.get(1).unwrap().as_str());
+            let fragment = captures.get(2).map(|m| m.as_str());
+            let fragment = fragment.filter(|s| !s.is_empty()).map(|s| s.to_string());
+            return HtmlFileLink { path, fragment };
+        }
+        panic!("Failed to parse path {path:?}")
+    }
+}
 
 #[derive(Debug)]
-pub struct FileCache(HashMap<PathBuf, HtmlInfo>);
-impl FileCache {
-    pub fn build(directories: &[PathBuf]) -> std::io::Result<FileCache> {
+pub struct HtmlFiles(HashMap<PathBuf, HtmlInfo>);
+impl HtmlFiles {
+    pub fn new(directories: &[PathBuf]) -> std::io::Result<HtmlFiles> {
         let mut map = HashMap::new();
         for directory in directories {
             for result in WalkDir::new(directory) {
@@ -24,9 +48,9 @@ impl FileCache {
                 }
             }
         }
-        Ok(FileCache(map))
+        Ok(HtmlFiles(map))
     }
-    pub fn contains(&self, RelativeLink { path, fragment }: &RelativeLink) -> bool {
+    pub fn contains(&self, HtmlFileLink { path, fragment }: &HtmlFileLink) -> bool {
         let path_with_index = path.join("index.html");
         if let Some(info) = self.0.get(path).or_else(|| self.0.get(&path_with_index)) {
             // If a "#fragment" id is present, also check that the document contains the fragment
@@ -39,7 +63,7 @@ impl FileCache {
             false
         }
     }
-    pub fn uncached_file_links(&self) -> Vec<RelativeLink> {
+    pub fn missing_file_links(&self) -> Vec<HtmlFileLink> {
         self.0
             .iter()
             .flat_map(|(file_path, info)| {
@@ -47,7 +71,7 @@ impl FileCache {
                     .iter()
                     .map(|href| file_path.parent().expect("No parent").join(href))
                     .map(|href| normalize_path(&href))
-                    .map(|href| RelativeLink::new(&href))
+                    .map(|href| HtmlFileLink::new(&href))
                     .filter(|link| !self.contains(link))
             })
             .collect()

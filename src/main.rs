@@ -7,7 +7,7 @@ use clap::Parser;
 
 mod html;
 mod tree;
-use crate::tree::FileCache;
+use crate::tree::HtmlFiles;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -51,8 +51,8 @@ pub fn file_exists(base_dir: &Path, path: &Path) -> bool {
 pub fn main() -> std::io::Result<()> {
     let mut args = Args::parse();
     let base_dir = args.base_dir()?;
-    let files = FileCache::build(args.resolve_directories()?)?;
-    for link in files.uncached_file_links() {
+    let files = HtmlFiles::new(args.resolve_directories()?)?;
+    for link in files.missing_file_links() {
         if !file_exists(&base_dir, &link.path) {
             println!("Failed {link:?} in {base_dir:?}");
         }
