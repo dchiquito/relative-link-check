@@ -140,4 +140,51 @@ mod test {
         assert_link_eq!("#", "");
         assert_link_eq!("", "");
     }
+
+    #[test]
+    fn test_html_files_contains() {
+        macro_rules! link {
+            ($path:expr) => {
+                HtmlFileLink {
+                    path: $path.into(),
+                    fragment: None,
+                }
+            };
+            ($path:expr, $fragment:expr) => {
+                HtmlFileLink {
+                    path: $path.into(),
+                    fragment: Some($fragment.into()),
+                }
+            };
+        }
+        macro_rules! html_files {
+            ($files:expr, $key:expr => $value:expr) => {{
+                $files.0.insert($key.into(), HtmlInfo::parse($value));
+            }};
+            ($($key:expr => $value:expr),+) => {{
+                let mut files = HtmlFiles(HashMap::new());
+                $(
+                    html_files!(files, $key => $value);
+                )*
+                files
+            }};
+        }
+        let files = html_files!(
+            "foo" => "<a href=\"foo\" id=\"foo\">",
+            "/bar" => "<a href=\"/bar\" id=\"bar\">",
+            "/baz/index.html" => "<a href=\"/baz\" id=\"baz\">"
+        );
+        assert!(files.contains(&HtmlFileLink::new("foo")));
+        assert!(!files.contains(&HtmlFileLink::new("foooo")));
+        assert!(files.contains(&HtmlFileLink::new("foo#foo")));
+        assert!(files.contains(&HtmlFileLink::new("/bar")));
+        assert!(files.contains(&HtmlFileLink::new("/bar#bar")));
+        assert!(!files.contains(&HtmlFileLink::new("bar")));
+        assert!(files.contains(&HtmlFileLink::new("/baz")));
+        assert!(files.contains(&HtmlFileLink::new("/baz#baz")));
+        assert!(files.contains(&HtmlFileLink::new("/baz/")));
+        assert!(files.contains(&HtmlFileLink::new("/baz/#baz")));
+        assert!(files.contains(&HtmlFileLink::new("/baz/index.html#baz")));
+        assert!(files.contains(&HtmlFileLink::new("/baz/index.html#baz")));
+    }
 }
