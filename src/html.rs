@@ -18,7 +18,7 @@ pub struct HtmlInfo {
 }
 
 impl HtmlInfo {
-    pub fn parse_file(path: &Path) -> std::io::Result<HtmlInfo> {
+    pub fn parse_file<P: AsRef<Path>>(path: P) -> std::io::Result<HtmlInfo> {
         let contents = std::fs::read_to_string(path)?;
         Ok(Self::parse(&contents))
     }

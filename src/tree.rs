@@ -10,15 +10,15 @@ use crate::html::HtmlInfo;
 /**
 A link to an HTML file, with optional fragment.
 */
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct HtmlFileLink {
     pub path: PathBuf,
     pub fragment: Option<String>,
 }
 
 impl HtmlFileLink {
-    pub fn new(path: &Path) -> HtmlFileLink {
-        let path = path.to_str().expect("Invalid path");
+    pub fn new<P: AsRef<Path>>(path: P) -> HtmlFileLink {
+        let path = path.as_ref().to_str().expect("Invalid path");
         let pattern = Regex::new("^(.*?)(?:#([^#]*))?$").unwrap();
         if let Some(captures) = pattern.captures(path) {
             let path = PathBuf::from(captures.get(1).unwrap().as_str());
@@ -70,16 +70,16 @@ impl HtmlFiles {
                 info.relative_hrefs
                     .iter()
                     .map(|href| file_path.parent().expect("No parent").join(href))
-                    .map(|href| normalize_path(&href))
-                    .map(|href| HtmlFileLink::new(&href))
+                    .map(normalize_path)
+                    .map(HtmlFileLink::new)
                     .filter(|link| !self.contains(link))
             })
             .collect()
     }
 }
 
-pub fn normalize_path(path: &Path) -> PathBuf {
-    let mut components = path.components().peekable();
+pub fn normalize_path<P: AsRef<Path>>(path: P) -> PathBuf {
+    let mut components = path.as_ref().components().peekable();
     let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
         components.next();
         PathBuf::from(c.as_os_str())
@@ -103,4 +103,41 @@ pub fn normalize_path(path: &Path) -> PathBuf {
         }
     }
     ret.strip_prefix("/").map(Path::to_path_buf).unwrap_or(ret)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn test_html_file_link_new() {
+        macro_rules! assert_link_eq {
+            ($href:expr, $path:expr ) => {
+                assert_eq!(
+                    HtmlFileLink::new($href),
+                    HtmlFileLink {
+                        path: $path.into(),
+                        fragment: None,
+                    }
+                );
+            };
+            ($href:expr, $path:expr, $fragment:expr) => {
+                assert_eq!(
+                    HtmlFileLink::new($href),
+                    HtmlFileLink {
+                        path: $path.into(),
+                        fragment: Some($fragment.into())
+                    }
+                );
+            };
+        }
+        assert_link_eq!("foo", "foo");
+        assert_link_eq!("foo/bar", "foo/bar");
+        assert_link_eq!("/foo/bar", "/foo/bar");
+        assert_link_eq!("foo#bar", "foo", "bar");
+        assert_link_eq!("foo#bar#baz", "foo#bar", "baz");
+        assert_link_eq!("foo#", "foo");
+        assert_link_eq!("#foo", "", "foo");
+        assert_link_eq!("#", "");
+        assert_link_eq!("", "");
+    }
 }
