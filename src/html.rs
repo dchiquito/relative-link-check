@@ -24,6 +24,8 @@ impl HtmlInfo {
     }
     pub fn parse(document: &str) -> HtmlInfo {
         let document = Html::parse_document(document);
+        // TODO img src
+        // TODO other srcs
         let link_selector = Selector::parse("a[href]").unwrap();
         let (relative_hrefs, external_hrefs) = document
             .select(&link_selector)

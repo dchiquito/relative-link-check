@@ -69,9 +69,13 @@ impl HtmlFiles {
             .flat_map(|(file_path, info)| {
                 info.relative_hrefs
                     .iter()
+                    .inspect(|x| println!("a {x:?}"))
                     .map(|href| file_path.parent().expect("No parent").join(href))
+                    .inspect(|x| println!("b {x:?}"))
                     .map(normalize_path)
+                    .inspect(|x| println!("c {x:?}"))
                     .map(HtmlFileLink::new)
+                    .inspect(|x| println!("d {x:?}"))
                     .filter(|link| !self.contains(link))
             })
             .collect()
@@ -102,7 +106,8 @@ pub fn normalize_path<P: AsRef<Path>>(path: P) -> PathBuf {
             }
         }
     }
-    ret.strip_prefix("/").map(Path::to_path_buf).unwrap_or(ret)
+    // ret.strip_prefix("/").map(Path::to_path_buf).unwrap_or(ret)
+    ret
 }
 
 #[cfg(test)]
@@ -141,50 +146,54 @@ mod test {
         assert_link_eq!("", "");
     }
 
+    macro_rules! html_files {
+        ($files:expr, $key:expr => $value:expr) => {{
+            $files.0.insert($key.into(), HtmlInfo::parse($value));
+        }};
+        ($($key:expr => $value:expr),+) => {{
+            let mut files = HtmlFiles(HashMap::new());
+            $(
+                html_files!(files, $key => $value);
+            )*
+            files
+        }};
+    }
+    macro_rules! link {
+        ($path:expr) => {
+            HtmlFileLink::new($path)
+        };
+    }
+
     #[test]
     fn test_html_files_contains() {
-        macro_rules! link {
-            ($path:expr) => {
-                HtmlFileLink {
-                    path: $path.into(),
-                    fragment: None,
-                }
-            };
-            ($path:expr, $fragment:expr) => {
-                HtmlFileLink {
-                    path: $path.into(),
-                    fragment: Some($fragment.into()),
-                }
-            };
-        }
-        macro_rules! html_files {
-            ($files:expr, $key:expr => $value:expr) => {{
-                $files.0.insert($key.into(), HtmlInfo::parse($value));
-            }};
-            ($($key:expr => $value:expr),+) => {{
-                let mut files = HtmlFiles(HashMap::new());
-                $(
-                    html_files!(files, $key => $value);
-                )*
-                files
-            }};
-        }
         let files = html_files!(
-            "foo" => "<a href=\"foo\" id=\"foo\">",
-            "/bar" => "<a href=\"/bar\" id=\"bar\">",
-            "/baz/index.html" => "<a href=\"/baz\" id=\"baz\">"
+            "foo" => r#"<a href="foo" id="foo" />"#,
+            "/bar" => r#"<a href="/bar" id="bar" />"#,
+            "/baz/index.html" => r#"<a href="/baz" id="baz" />"#
         );
-        assert!(files.contains(&HtmlFileLink::new("foo")));
-        assert!(!files.contains(&HtmlFileLink::new("foooo")));
-        assert!(files.contains(&HtmlFileLink::new("foo#foo")));
-        assert!(files.contains(&HtmlFileLink::new("/bar")));
-        assert!(files.contains(&HtmlFileLink::new("/bar#bar")));
-        assert!(!files.contains(&HtmlFileLink::new("bar")));
-        assert!(files.contains(&HtmlFileLink::new("/baz")));
-        assert!(files.contains(&HtmlFileLink::new("/baz#baz")));
-        assert!(files.contains(&HtmlFileLink::new("/baz/")));
-        assert!(files.contains(&HtmlFileLink::new("/baz/#baz")));
-        assert!(files.contains(&HtmlFileLink::new("/baz/index.html#baz")));
-        assert!(files.contains(&HtmlFileLink::new("/baz/index.html#baz")));
+        assert!(files.contains(&link!("foo")));
+        assert!(!files.contains(&link!("foooo")));
+        assert!(files.contains(&link!("foo#foo")));
+        assert!(files.contains(&link!("/bar")));
+        assert!(files.contains(&link!("/bar#bar")));
+        assert!(!files.contains(&link!("bar")));
+        assert!(files.contains(&link!("/baz")));
+        assert!(files.contains(&link!("/baz#baz")));
+        assert!(files.contains(&link!("/baz/")));
+        assert!(files.contains(&link!("/baz/#baz")));
+        assert!(files.contains(&link!("/baz/index.html#baz")));
+        assert!(files.contains(&link!("/baz/index.html#baz")));
+    }
+
+    #[test]
+    fn test_html_files_missing_file_links() {
+        let files = html_files!(
+            "foo" => r#"<a href="foo" id="foo" />"#,
+            "/bar" => r#"<a href="/bar" id="bar" />"#,
+            "/baz/index.html" => r#"<a href="/baz" id="baz" />"#
+        );
+        // TODO make files absolute, don't trim the root off
+        assert_eq!(files.missing_file_links(), vec![]);
+        assert!(false);
     }
 }
